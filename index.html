@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tally</title>
+<meta name="apple-mobile-web-app-title" content="Tally">
+<meta name="theme-color" content="#4A1A1F">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="manifest" href="manifest.json">
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #4A1A1F; color: #F3D9A4;
+    font-family: -apple-system, system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  }
+  .firma { font-family: ui-serif, "New York", Georgia, serif; font-size: 32px; letter-spacing: -0.01em; margin: 0; }
+  a {
+    display: none; color: #4A1A1F; background: #F3D9A4; text-decoration: none;
+    font-weight: 600; padding: 14px 28px; border-radius: 12px; min-height: 44px; box-sizing: border-box;
+  }
+  a:focus-visible { outline: 3px solid #F3D9A4; outline-offset: 3px; }
+  .mostrar a { display: inline-block; }
+</style>
+</head>
+<body>
+  <img src="icon-192.png" width="96" height="96" alt="" style="border-radius:22.5%">
+  <p class="firma">Tally</p>
+  <a id="abrir" href="https://script.google.com/macros/s/AKfycbwauG7QLQ8_6BHFnVjspBmtjN3UE30G7b8GChf4G-onTsmdefLtCOC6JJJXYiMY3IM/exec">Abrir Tally</a>
+<script>
+  var url = document.getElementById('abrir').href;
+  setTimeout(function () { location.replace(url); }, 250);
+  setTimeout(function () { document.body.className = 'mostrar'; }, 3000);
+</script>
+</body>
+</html>
