@@ -6,14 +6,24 @@
 <title>Tally</title>
 <meta name="apple-mobile-web-app-title" content="Tally">
 <meta name="theme-color" content="#4A1A1F">
-<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="tally-touch-v2.png">
+<link rel="apple-touch-icon-precomposed" sizes="180x180" href="tally-touch-v2.png">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="manifest" href="manifest.json">
 <script>
   // Desde el ícono (?go=1) se entra directo a la app; abierta a mano, la página se queda para poder agregar el ícono.
   var APP = 'https://script.google.com/macros/s/AKfycbwauG7QLQ8_6BHFnVjspBmtjN3UE30G7b8GChf4G-onTsmdefLtCOC6JJJXYiMY3IM/exec';
-  if (/[?&]go=1(&|$)/.test(location.search)) location.replace(APP);
+  // Solo redirige con la página visible: cuando iOS la carga por detrás para leer el ícono, no se va a Google.
+  var GO = /[?&]go=1(&|$)/.test(location.search), salio = false;
+  function irApp() {
+    if (!GO || salio || document.visibilityState !== 'visible') return;
+    salio = true;
+    setTimeout(function () { location.replace(APP); }, 300);
+  }
+  document.addEventListener('visibilitychange', irApp);
+  window.addEventListener('pageshow', irApp);
+  irApp();
 </script>
 <style>
   :root { color-scheme: dark; }
