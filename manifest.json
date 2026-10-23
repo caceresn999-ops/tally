@@ -1,7 +1,7 @@
 {
   "name": "Tally",
   "short_name": "Tally",
-  "start_url": "./",
+  "start_url": "./?go=1",
   "display": "browser",
   "background_color": "#4A1A1F",
   "theme_color": "#4A1A1F",
