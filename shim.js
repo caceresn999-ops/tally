@@ -302,6 +302,9 @@
   const lockKey = 'tally.lock.credentialId';
   let credentialId = stored(lockKey);
   let unlocked = !credentialId;
+  let revealed = false;
+  let revealVersion = 0;
+  let revealRequest;
   let hiddenAt = null;
   let lockDialog, lockCheckbox, lockStatus, lockButton, lockMessage, unlockRequest;
   let lockSupport;
@@ -313,10 +316,23 @@
     const locked = enabled() && !unlocked;
     setCurtain(locked);
     if (lockCheckbox) lockCheckbox.checked = enabled();
-    if (!lockDialog) return;
-    if (locked && !lockDialog.open) lockDialog.showModal();
-    if (!locked && lockDialog.open) lockDialog.close();
+    if (lockDialog) {
+      if (locked && !lockDialog.open) lockDialog.showModal();
+      if (!locked && lockDialog.open) lockDialog.close();
+    }
     window.dispatchEvent(new CustomEvent('tally:lock'));
+  }
+
+  function resetReveal() {
+    revealed = false;
+    // Ignore a Face ID result if the screen was hidden while it was pending.
+    revealVersion++;
+  }
+
+  function hide() {
+    const wasRevealed = revealed;
+    resetReveal();
+    if (wasRevealed) paintLock();
   }
 
   async function supportsLock() {
@@ -329,6 +345,7 @@
   function disableLock() {
     credentialId = null;
     unlocked = true;
+    resetReveal();
     try { localStorage.removeItem(lockKey); } catch {}
     paintLock();
   }
@@ -353,7 +370,18 @@
     localStorage.setItem(lockKey, id);
     credentialId = id;
     unlocked = true;
+    resetReveal();
     paintLock();
+  }
+
+  async function verifyCredential(id) {
+    const credential = await navigator.credentials.get({
+      publicKey: { challenge: challenge(), rpId: location.hostname, userVerification: 'required',
+        allowCredentials: [{ id: Uint8Array.from(atob(id), c => c.charCodeAt(0)), type: 'public-key', transports: ['internal'] }],
+        timeout: 60000 }
+    });
+    if (!credential?.rawId?.byteLength || btoa(String.fromCharCode(...new Uint8Array(credential.rawId))) !== id ||
+        id !== credentialId) throw new Error('Credencial incorrecta');
   }
 
   function requestUnlock() {
@@ -369,13 +397,7 @@
           if (lockStatus) lockStatus.textContent = 'El bloqueo se apagó porque Face ID no está disponible.';
           return false;
         }
-        const credential = await navigator.credentials.get({
-          publicKey: { challenge: challenge(), rpId: location.hostname, userVerification: 'required',
-            allowCredentials: [{ id: Uint8Array.from(atob(id), c => c.charCodeAt(0)), type: 'public-key', transports: ['internal'] }],
-            timeout: 60000 }
-        });
-        if (!credential?.rawId?.byteLength || btoa(String.fromCharCode(...new Uint8Array(credential.rawId))) !== id ||
-            id !== credentialId) throw new Error('Credencial incorrecta');
+        await verifyCredential(id);
         unlocked = true;
         paintLock();
         return true;
@@ -388,6 +410,27 @@
       }
     })();
     return unlockRequest;
+  }
+
+  function requestReveal() {
+    if (!enabled() || revealed) return Promise.resolve(true);
+    if (!unlocked || document.hidden) return Promise.resolve(false);
+    if (revealRequest) return revealRequest;
+    const version = revealVersion;
+    revealRequest = (async () => {
+      try {
+        await verifyCredential(credentialId);
+        if (version !== revealVersion || document.hidden || !unlocked) return false;
+        revealed = true;
+        paintLock();
+        return true;
+      } catch {
+        return false;
+      } finally {
+        revealRequest = null;
+      }
+    })();
+    return revealRequest;
   }
 
   function mountLock() {
@@ -426,7 +469,11 @@
   }
 
   function privacyOnReturn() {
-    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (document.hidden) {
+      hiddenAt = Date.now();
+      hide();
+      return;
+    }
     if (hiddenAt !== null && Date.now() - hiddenAt > 60000 && enabled()) {
       unlocked = false;
       paintLock();
@@ -443,10 +490,12 @@
     if (event.key === lockKey) {
       credentialId = stored(lockKey);
       unlocked = !credentialId;
+      resetReveal();
       paintLock();
     }
   });
   window.google = { script: { run: runner() } };
   window.tallyConnection = { isFresh: data => freshData === data, registerWorker };
-  window.tallyLock = { enabled, unlocked: () => unlocked, requestUnlock };
+  window.tallyLock = { enabled, unlocked: () => unlocked, requestUnlock,
+    revealed: () => revealed, requestReveal, hide };
 })();

@@ -1035,7 +1035,7 @@ svg { display: block; flex: none; }
     </section>
     <button class="attention" id="attention" type="button" hidden><span class="attention-icon" aria-hidden="true"><span data-icon="camera"></span></span><span class="att-text" id="attentionText"></span><span id="attentionChevron" aria-hidden="true"></span><span class="attention-action">Revisar</span></button>
     <button class="card premium-banner" id="wrappedBanner" type="button" hidden>Tu año en Tally está listo <span data-icon="chevron"></span></button>
-    <section class="card" id="moneySection" hidden><div class="section-head"><h2 class="section-title">Mi dinero</h2><div class="premium-controls"><strong class="money-total num" id="moneyTotal"></strong><button class="premium-reveal" id="revealMoney" type="button" hidden><span data-icon="eye"></span>Mostrar</button></div></div><div class="account-list" id="accountList"></div></section>
+    <section class="card" id="moneySection" hidden><div class="section-head"><h2 class="section-title">Mi dinero</h2><div class="premium-controls"><strong class="money-total num" id="moneyTotal"></strong><button class="premium-reveal" id="revealMoney" type="button" hidden><span data-icon="eye"></span><span id="revealMoneyLabel">Mostrar</span></button></div></div><div class="account-list" id="accountList"></div></section>
     <div id="homeEmpty" class="empty card" hidden></div>
     <section class="card" id="topCatsSection"><div class="section-head"><h2 class="section-title">Principales categorías</h2><button class="text-link" type="button" data-go="month">Ver mes</button></div><div class="category-list" id="topCats"></div></section>
     <section class="card" id="recentSection"><div class="section-head"><h2 class="section-title">Recientes</h2><button class="text-link" type="button" data-go="moves">Ver todos</button></div><div class="recent-list" id="recentList"></div></section>
@@ -1224,7 +1224,55 @@ function renderRecurring(b,monthKey){var section=$("recurringSection"),box=$("re
 function computedAccounts(){var byMedio={};(S.cuentas||[]).forEach(function(c){byMedio[c.medio]={medio:c.medio,nombre:c.nombre,moneda:c.moneda,saldo:Number(c.saldo)||0,desde:String(c.desde||""),ajustado:Number(c.ajustado)||0,balance:Number(c.saldo)||0,limite:Number(c.limite)||0,deuda:c.medio===MEDIO_TDC}});S.movs.forEach(function(m){var ts=Number(m.ts)||0;if(m.tipo==="cambio"){var partes=String(m.medio||"").split(" → "),sale=byMedio[partes[0]],entra=byMedio[partes[1]];if(sale&&m.fecha>=sale.desde&&ts>sale.ajustado)sale.balance-=Number(m.monto)||0;if(entra&&m.fecha>=entra.desde&&ts>entra.ajustado)entra.balance+=Number(m.monto2)||0;return}var c=byMedio[m.medio];if(!c||m.fecha<c.desde||ts<=c.ajustado)return;if(m.tipo==="gasto")c.balance-=Number(m.monto)||0;else if(m.tipo==="ingreso")c.balance+=Number(m.monto)||0});var orden={"Wells Fargo":0,"Binance":1,"Bolívares":2,"Efectivo":3,"TDC":4};return Object.keys(byMedio).map(function(k){return byMedio[k]}).sort(function(a,b){return(orden[a.nombre]==null?99:orden[a.nombre])-(orden[b.nombre]==null?99:orden[b.nombre])})}
 function accountMoney(n,moneda){var sign=n<0?"−":"",v=Math.abs(Number(n)||0);return moneda==="VES"?sign+"Bs "+fNum(v):(moneda==="USDT"?sign+fNum(v)+" USDT":sign+"$"+fNum(v))}
 function accountIcon(c){return c.deuda?"card":c.moneda==="VES"?"wallet":(c.moneda==="USDT"?"exchange":(c.nombre==="Wells Fargo"?"bank":"banknote"))}
-function renderMoney(){var section=$("moneySection"),box=$("accountList"),accounts=computedAccounts();section.hidden=!accounts.length;box.textContent="";var masked=moneyMasked();$("revealMoney").hidden=!masked;if(!accounts.length)return;var total=accounts.reduce(function(s,c){return s+(accountUsd(c)||0)},0);var totalNode=$("moneyTotal");totalNode.classList.toggle("premium-mask",masked);if(masked){totalNode.textContent="••••";totalNode.removeAttribute("aria-label")}else moneyInto(totalNode,total);accounts.forEach(function(c){var row=el("button","account-row");row.type="button";row.appendChild((function(){var b=el("span","icon-bubble "+tintFor(c.medio)+(c.deuda?" debt-avatar":""));b.appendChild(icon(accountIcon(c),20));return b})());var main=el("span","account-main");main.appendChild(el("span","account-name",c.nombre));main.appendChild(el("span","account-hint",c.moneda==="USD"?"USD":curLbl(c.moneda)));row.appendChild(main);if(masked){row.appendChild(el("span","account-balance premium-mask","••••"));row.onclick=function(){window.tallyLock.requestUnlock()};box.appendChild(row);return}if(c.deuda){row.appendChild(debtSide(c));row.setAttribute("aria-label","TDC: pagar la tarjeta");row.onclick=function(){openCardPayment(c,row)};box.appendChild(row);return}var side=el("span","account-side"),amount=el("span","account-balance num"+(c.balance<0?" negative":""));if(c.balance<0)amount.appendChild(icon("alert-triangle",14));amount.appendChild(document.createTextNode(accountMoney(c.balance,c.moneda)));side.appendChild(amount);if(c.moneda==="VES"&&S.rate)main.replaceChild(el("span","account-hint num","≈ "+fUSD(c.balance/S.rate)),main.lastChild);if(c.balance<0)side.appendChild(el("span","account-hint","Revisa este saldo"));row.appendChild(side);row.onclick=function(){openAdjust(c,row)};box.appendChild(row)});if(accounts.some(function(c){return c.deuda}))box.appendChild(el("p","account-note","Total neto: lo que tienes menos lo que debes en la tarjeta."))}
+function renderMoney() {
+  var section=$("moneySection"),box=$("accountList"),accounts=computedAccounts(),lock=window.tallyLock;
+  var masked=moneyMasked();
+  section.hidden=!accounts.length;
+  box.textContent="";
+  $("revealMoney").hidden=!lock||!lock.enabled();
+  $("revealMoneyLabel").textContent=masked?"Mostrar":"Ocultar";
+  if(!accounts.length)return;
+
+  var totalNode=$("moneyTotal");
+  totalNode.classList.toggle("premium-mask",masked);
+  if(masked){
+    totalNode.textContent="••••";
+    totalNode.removeAttribute("aria-label");
+  }else{
+    var total=accounts.reduce(function(s,c){return s+(accountUsd(c)||0)},0);
+    moneyInto(totalNode,total);
+  }
+  accounts.forEach(function(c){
+    var row=el("button","account-row");
+    row.type="button";
+    var bubble=el("span","icon-bubble "+tintFor(c.medio)+(c.deuda?" debt-avatar":""));
+    bubble.appendChild(icon(accountIcon(c),20));
+    row.appendChild(bubble);
+    var main=el("span","account-main");
+    main.appendChild(el("span","account-name",c.nombre));
+    main.appendChild(el("span","account-hint",c.moneda==="USD"?"USD":curLbl(c.moneda)));
+    row.appendChild(main);
+    if(masked){
+      row.appendChild(el("span","account-balance premium-mask","••••"));
+      row.onclick=function(){lock.requestReveal()};
+    }else if(c.deuda){
+      row.appendChild(debtSide(c));
+      row.setAttribute("aria-label","TDC: pagar la tarjeta");
+      row.onclick=function(){openCardPayment(c,row)};
+    }else{
+      var side=el("span","account-side"),amount=el("span","account-balance num"+(c.balance<0?" negative":""));
+      if(c.balance<0)amount.appendChild(icon("alert-triangle",14));
+      amount.appendChild(document.createTextNode(accountMoney(c.balance,c.moneda)));
+      side.appendChild(amount);
+      if(c.moneda==="VES"&&S.rate)main.replaceChild(el("span","account-hint num","≈ "+fUSD(c.balance/S.rate)),main.lastChild);
+      if(c.balance<0)side.appendChild(el("span","account-hint","Revisa este saldo"));
+      row.appendChild(side);
+      row.onclick=function(){openAdjust(c,row)};
+    }
+    box.appendChild(row);
+  });
+  if(accounts.some(function(c){return c.deuda}))box.appendChild(el("p","account-note","Total neto: lo que tienes menos lo que debes en la tarjeta."));
+}
 function openCardPayment(c,opener){resetForm();setType("cambio");S.medio=MEDIOS[0];S.medio2=MEDIOS.filter(function(m){return m.tdc})[0];renderMethods();var debe=Math.max(0,-c.balance);$("amountInput").value=debe>0?fNum(debe):"";$("noteInput").value="Pago de TDC";updateEquivalent();$("registerTitle").textContent="Pagar TDC";$("saveBtn").textContent="Pagar";openSheet("registerSheet",opener);setTimeout(function(){$("amountInput").focus()},240)}
 function debtSide(c){var side=el("span","account-side"),debe=Math.max(0,-c.balance),favor=Math.max(0,c.balance),uso=c.limite>0?debe/c.limite:0,amount=el("span","account-balance num"+(uso>1?" negative":""));if(uso>1)amount.appendChild(icon("alert-triangle",14));amount.appendChild(document.createTextNode(favor>0?accountMoney(favor,"VES")+" a favor":(debe>0?"Debes "+accountMoney(debe,"VES"):"Sin deuda")));side.appendChild(amount);if(debe>0&&S.rate)side.appendChild(el("span","account-hint num","≈ "+fUSD(debe/S.rate)));if(c.limite>0){side.appendChild(el("span","account-hint num"+(uso>1?" over":""),uso>1?"Límite "+accountMoney(c.limite,"VES"):"Disponible "+accountMoney(c.limite-debe,"VES")));if(uso>1)side.appendChild(el("span","account-hint over","Pasaste el límite"));else if(uso>=0.8)side.appendChild(el("span","account-hint warn","Cerca del límite"))}return side}
 function openAdjust(c,opener){S.adjustAccount=c;$("adjustTitle").textContent=(c.deuda?"Ajustar deuda · ":"Ajustar saldo · ")+c.nombre;$("adjustCurrent").textContent=c.deuda?"Debes según Tally: "+accountMoney(Math.max(0,-c.balance),"VES"):"Saldo actual: "+accountMoney(c.balance,c.moneda);document.querySelector('label[for="adjustInput"]').textContent=c.deuda?"¿Cuánto debes hoy?":"Saldo de hoy";$("adjustHelp").textContent=c.deuda?"Escribe el saldo deudor que ves hoy en tu banco. Desde ahora Tally suma tus compras con la tarjeta y resta tus pagos.":"Escribe lo que ves hoy en tu banco o app. Desde ahora Tally suma y resta tus registros a partir de este saldo.";$("adjustCurrency").textContent=curLbl(c.moneda);$("adjustInput").value="";$("adjustStatus").textContent="";$("adjustStatus").className="status";$("adjustSave").disabled=false;$("adjustSave").textContent="Guardar saldo";openSheet("adjustSheet",opener);setTimeout(function(){$("adjustInput").focus()},240)}
@@ -1638,7 +1686,7 @@ function accountUsd(c) {
 
 function moneyMasked() {
   var lock=window.tallyLock;
-  return !!lock&&lock.enabled()&&!lock.unlocked();
+  return !!lock&&lock.enabled()&&!lock.revealed();
 }
 
 function paintAskButton() {
@@ -2093,7 +2141,12 @@ function toggleSummary() {
 
 function bindPremium() {
   $("homeAlert").onclick=openAlerts;
-  $("revealMoney").onclick=function(){window.tallyLock.requestUnlock()};
+  $("revealMoney").onclick=function(){
+    var lock=window.tallyLock;
+    if(!lock||!lock.enabled())return;
+    if(lock.revealed())lock.hide();
+    else lock.requestReveal();
+  };
   window.addEventListener("tally:lock",function(){if(S.hoy)renderMoney()});
   $("tagAdd").onclick=addTag;
   $("tagInput").onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();addTag()}};
