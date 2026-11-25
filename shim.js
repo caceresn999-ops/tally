@@ -162,19 +162,21 @@
     const style = document.createElement('style');
     style.textContent = `
       #tally-connection { box-sizing: border-box; width: min(calc(100% - 32px), 430px);
-        padding: 24px; border: 1px solid var(--line); border-radius: 18px; margin: auto;
-        background: var(--surface); color: var(--ink); }
-      #tally-connection::backdrop { background: rgb(28 15 16 / .72); }
-      #tally-connection h2 { margin: 0 0 18px; }
+        max-height: calc(100% - 32px); overflow-y: auto; padding: var(--pad); margin: auto;
+        border: 1px solid var(--card-edge); border-radius: var(--radius-sheet);
+        background: var(--surface); color: var(--ink); box-shadow: var(--card-shadow); }
+      #tally-connection::backdrop { background: var(--backdrop); }
+      #tally-connection h2 { margin: 0 0 16px; font-size: 20px; font-weight: 600; }
       #tally-connection form, #tally-connection label { display: grid; gap: 8px; }
-      #tally-connection form { gap: 14px; }
-      #tally-connection input { width: 100%; min-height: 44px; padding: 8px 10px; }
-      #tally-connection a { color: inherit; text-align: center; }
+      #tally-connection form { gap: 12px; }
+      #tally-connection label { color: var(--muted); font-size: 12px; font-weight: 600; }
+      #tally-connection a { display: grid; place-items: center; min-height: 44px;
+        color: var(--accent-text); font-weight: 500; text-align: center; }
       #settingsConnection { width: 100%; margin-top: 10px; }
-      #tally-sync-status:not([hidden]) { position: fixed; z-index: 5; left: 50%;
-        top: calc(env(safe-area-inset-top) + 5px); transform: translateX(-50%);
-        padding: 4px 10px; border-radius: 20px; background: var(--surface);
-        color: var(--ink); border: 1px solid var(--line); font-size: .75rem; pointer-events: none; }
+      #tally-sync-status:not([hidden]) { position: fixed; z-index: 11; left: 50%;
+        top: calc(env(safe-area-inset-top) + var(--top-height)); transform: translateX(-50%);
+        padding: 4px 12px; border-radius: var(--radius-pill); background: var(--surface);
+        color: var(--ink); box-shadow: var(--control-shadow); font-size: 12px; pointer-events: none; }
     `;
     document.head.append(style);
     indicator = document.createElement('div');
@@ -190,10 +192,10 @@
       <h2 id="tally-connection-title">Conexión</h2>
       <form>
         <label>URL del servicio
-          <input name="url" type="url" required autocomplete="off" spellcheck="false">
+          <input class="text-input" name="url" type="url" required autocomplete="off" spellcheck="false">
         </label>
         <label>Token
-          <input name="token" type="password" required autocomplete="off">
+          <input class="text-input" name="token" type="password" required autocomplete="off">
         </label>
         <div class="status error" role="status"></div>
         <button class="primary" type="submit">Conectar</button>
