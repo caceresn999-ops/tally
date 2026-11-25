@@ -1,4 +1,4 @@
-const CACHE = 'tally-896dcae74c';
+const CACHE = 'tally-cf82530fb6';
 const scoped = path => new URL(path, self.registration.scope).href;
 const INDEX = scoped('./index.html');
 const HOME = scoped('./');

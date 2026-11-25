@@ -7,7 +7,8 @@
   const OFFLINE_ERROR = 'Sin conexión. Revisa tu conexión e inténtalo de nuevo.';
   const WRITES = new Set([
     'guardar', 'editarMov', 'borrar', 'ajustarSaldo', 'activarTarjeta',
-    'guardarAjustes', 'guardarTasa', 'resolverPendiente'
+    'guardarAjustes', 'guardarTasa', 'resolverPendiente',
+    'guardarMeta', 'borrarMeta', 'guardarRollover', 'activarResumen'
   ]);
   let dialog, indicator, freshData, connect;
   const connection = new Promise(resolve => { connect = resolve; });
@@ -297,11 +298,155 @@
       .then(registration => registration.update()).catch(() => {});
   }
 
+  // Cortina local. La passkey no se envía a Apps Script.
+  const lockKey = 'tally.lock.credentialId';
+  let credentialId = stored(lockKey);
+  let unlocked = !credentialId;
+  let hiddenAt = null;
+  let lockDialog, lockCheckbox, lockStatus, lockButton, lockMessage, unlockRequest;
+  let lockSupport;
+  const enabled = () => !!credentialId;
+  const setCurtain = on => document.documentElement?.classList.toggle('tally-private', on);
+  setCurtain(enabled());
+
+  function paintLock() {
+    const locked = enabled() && !unlocked;
+    setCurtain(locked);
+    if (lockCheckbox) lockCheckbox.checked = enabled();
+    if (!lockDialog) return;
+    if (locked && !lockDialog.open) lockDialog.showModal();
+    if (!locked && lockDialog.open) lockDialog.close();
+    window.dispatchEvent(new CustomEvent('tally:lock'));
+  }
+
+  async function supportsLock() {
+    try {
+      return !!(navigator.credentials && typeof PublicKeyCredential !== 'undefined' &&
+        await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+    } catch { return false; }
+  }
+
+  function disableLock() {
+    credentialId = null;
+    unlocked = true;
+    try { localStorage.removeItem(lockKey); } catch {}
+    paintLock();
+  }
+
+  function challenge() { return crypto.getRandomValues(new Uint8Array(32)); }
+
+  async function enableLock() {
+    if (!await (lockSupport || supportsLock())) throw new Error('Este equipo no admite Face ID para Tally.');
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge: challenge(),
+        rp: { id: location.hostname, name: 'Tally' },
+        user: { id: challenge(), name: 'tally', displayName: 'Tally' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+        attestation: 'none',
+        timeout: 60000
+      }
+    });
+    if (!credential?.rawId?.byteLength) throw new Error('No se creó la clave de acceso.');
+    const id = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+    localStorage.setItem(lockKey, id);
+    credentialId = id;
+    unlocked = true;
+    paintLock();
+  }
+
+  function requestUnlock() {
+    if (!enabled() || unlocked) return Promise.resolve(true);
+    if (unlockRequest) return unlockRequest;
+    const id = credentialId;
+    unlockRequest = (async () => {
+      if (lockButton) lockButton.disabled = true;
+      if (lockMessage) lockMessage.textContent = '';
+      try {
+        if (!await (lockSupport || supportsLock())) {
+          disableLock();
+          if (lockStatus) lockStatus.textContent = 'El bloqueo se apagó porque Face ID no está disponible.';
+          return false;
+        }
+        const credential = await navigator.credentials.get({
+          publicKey: { challenge: challenge(), rpId: location.hostname, userVerification: 'required',
+            allowCredentials: [{ id: Uint8Array.from(atob(id), c => c.charCodeAt(0)), type: 'public-key', transports: ['internal'] }],
+            timeout: 60000 }
+        });
+        if (!credential?.rawId?.byteLength || btoa(String.fromCharCode(...new Uint8Array(credential.rawId))) !== id ||
+            id !== credentialId) throw new Error('Credencial incorrecta');
+        unlocked = true;
+        paintLock();
+        return true;
+      } catch {
+        if (lockMessage) lockMessage.textContent = 'No se pudo desbloquear. Intenta otra vez.';
+        return false;
+      } finally {
+        if (lockButton) lockButton.disabled = false;
+        unlockRequest = null;
+      }
+    })();
+    return unlockRequest;
+  }
+
+  function mountLock() {
+    const row = document.getElementById('settingsLockRow');
+    lockCheckbox = document.getElementById('settingsLock');
+    lockStatus = document.getElementById('settingsLockStatus');
+    lockDialog = document.getElementById('tally-lock-screen');
+    if (!lockDialog || !lockCheckbox || !row) return;
+    lockSupport = supportsLock();
+    lockButton = document.getElementById('tally-unlock');
+    lockMessage = document.getElementById('tally-unlock-message');
+    row.hidden = false;
+    lockButton?.addEventListener('click', requestUnlock);
+    lockDialog.addEventListener('cancel', event => event.preventDefault());
+    lockDialog.addEventListener('keydown', event => {
+      if (event.key === 'Escape') event.stopPropagation();
+    });
+    lockCheckbox.addEventListener('change', async () => {
+      lockStatus.textContent = '';
+      if (!lockCheckbox.checked) { disableLock(); return; }
+      lockCheckbox.checked = false;
+      lockCheckbox.disabled = true;
+      try { await enableLock(); }
+      catch (error) {
+        disableLock();
+        lockStatus.textContent = error.name === 'Error' ? error.message :
+          'No se pudo activar Face ID. Inténtalo de nuevo.';
+      } finally { lockCheckbox.disabled = false; }
+    });
+    paintLock();
+    if (enabled()) lockSupport.then(supported => {
+      if (supported || !enabled()) return;
+      disableLock();
+      lockStatus.textContent = 'El bloqueo se apagó porque Face ID no está disponible.';
+    });
+  }
+
+  function privacyOnReturn() {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (hiddenAt !== null && Date.now() - hiddenAt > 60000 && enabled()) {
+      unlocked = false;
+      paintLock();
+    }
+    hiddenAt = null;
+  }
+
   // Mount after the body is parsed. The inline app can call getInit before then.
   document.addEventListener('DOMContentLoaded', mount, { once: true });
+  document.addEventListener('DOMContentLoaded', mountLock, { once: true });
+  document.addEventListener('visibilitychange', privacyOnReturn);
   window.addEventListener('storage', event => {
     if (event.key === null || event.key === KEYS.token || event.key === KEYS.url) location.reload();
+    if (event.key === lockKey) {
+      credentialId = stored(lockKey);
+      unlocked = !credentialId;
+      paintLock();
+    }
   });
   window.google = { script: { run: runner() } };
   window.tallyConnection = { isFresh: data => freshData === data, registerWorker };
+  window.tallyLock = { enabled, unlocked: () => unlocked, requestUnlock };
 })();
